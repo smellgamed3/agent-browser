@@ -1,6 +1,6 @@
 ---
 name: agent-browser
-description: 浏览器自动化工具。当用户需要：(1) 打开网页/导航 URL (2) 点击按钮、填写表单、提交数据 (3) 截图或保存 PDF (4) 抓取/提取网页内容 (5) 网页自动化测试 (6) 登录网站并保存会话 (7) 任何需要与网页交互的任务。底层使用 agent-browser CLI。
+description: 浏览器自动化工具。当用户需要：(1) 打开网页/导航 URL (2) 点击按钮、填写表单、提交数据 (3) 截图或保存 PDF (4) 抓取/提取网页内容 (5) 网页自动化测试 (6) 登录网站并保存会话 (7) 管理 GitHub SSH/Deploy Key（新增、删除、排查无法删除问题） 或任何需要与网页交互的任务。底层使用 agent-browser CLI。
 compatibility: 需要安装 agent-browser CLI（npm install -g agent-browser）
 allowed-tools: Bash(agent-browser:*)
 ---
@@ -83,6 +83,64 @@ agent-browser --auto-connect open https://example.com
 # 指定 CDP 端口
 agent-browser --cdp 9222 snapshot
 ```
+
+### 删除 GitHub Deploy Key（含 UI 删除失效排查）
+
+当 GitHub 仓库 Settings → Deploy keys 页面中的"Delete"按钮无响应或无法删除时，按以下步骤操作：
+
+**方式一：浏览器自动化（标准流程）**
+
+```bash
+# 1. 打开 Deploy Keys 设置页
+agent-browser state load auth.json   # 已登录状态（如未保存则先手动登录）
+agent-browser open https://github.com/OWNER/REPO/settings/keys
+agent-browser wait --load networkidle
+agent-browser snapshot -i
+
+# 2. 通过 eval 定位目标 key 的 Delete 按钮（按指纹匹配）
+agent-browser eval --stdin <<'EVALEOF'
+JSON.stringify(
+  Array.from(document.querySelectorAll('.key-list-item, [data-target="deploy-key"]'))
+    .map((el, i) => ({
+      index: i,
+      fingerprint: el.querySelector('.fingerprint, code, [data-fingerprint]')?.textContent?.trim(),
+      deleteHref: el.querySelector('a[data-confirm], button[data-confirm], a[href*="delete"]')?.getAttribute('href')
+    }))
+)
+EVALEOF
+
+# 3. 点击对应 Delete 按钮并确认
+agent-browser find text "Delete" click   # 或使用 @ref 精确点击
+agent-browser wait --load networkidle
+agent-browser snapshot -i
+# 若出现确认对话框：
+agent-browser dialog accept
+# 若是页面内确认按钮：
+agent-browser find role button click --name "Delete"
+agent-browser wait --load networkidle
+agent-browser snapshot -i              # 确认 key 已消失
+```
+
+**方式二：通过 GitHub CLI 强制删除（UI 失效时的回退方案）**
+
+```bash
+# 列出所有 deploy key，找到目标 fingerprint 对应的 ID
+# （将每个 key 的公钥内容通过 ssh-keygen 计算 SHA256 指纹）
+gh api /repos/OWNER/REPO/keys | jq -r '.[] | "\(.id) \(.title) \(.key)"' | \
+  while IFS=' ' read -r id title key; do
+    fp=$(echo "$key" | ssh-keygen -lf /dev/stdin 2>/dev/null | awk '{print $2}')
+    echo "id=$id  title=$title  fingerprint=$fp"
+  done
+
+# 按 ID 删除（可同时删除多个）
+gh api -X DELETE /repos/OWNER/REPO/keys/{KEY_ID_1}
+gh api -X DELETE /repos/OWNER/REPO/keys/{KEY_ID_2}
+
+# 验证已删除
+gh api /repos/OWNER/REPO/keys | jq 'length'
+```
+
+> **注意**：若 `gh api` 返回 404，说明 key 已被删除；若返回 403，需要检查 Personal Access Token 权限是否包含 `repo` scope（deploy key 操作需要此权限）。
 
 ## 命令速查
 
