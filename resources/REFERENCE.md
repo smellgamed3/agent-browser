@@ -242,6 +242,47 @@ agent-browser trace start                 # 开始录制 trace
 agent-browser trace stop trace.zip        # 停止并保存 trace
 ```
 
+## 委派给云智能体
+
+通过云端浏览器提供商（如 Browserbase）将浏览器任务委派给云智能体，无需本地浏览器环境。
+
+```bash
+# 设置提供商（环境变量方式）
+export AGENT_BROWSER_PROVIDER="browserbase"
+export BROWSERBASE_API_KEY="your-api-key"
+
+# 或通过 -p 标志临时指定
+agent-browser -p browserbase open https://example.com
+agent-browser -p browserbase snapshot -i
+agent-browser -p browserbase fill @e1 "内容"
+agent-browser -p browserbase click @e2
+agent-browser -p browserbase screenshot result.png
+```
+
+### 云端会话管理
+
+```bash
+# 创建命名云会话
+agent-browser -p browserbase --session cloud-job open https://example.com
+
+# 在同一云会话中继续操作
+agent-browser -p browserbase --session cloud-job snapshot -i
+agent-browser -p browserbase --session cloud-job click @e3
+
+# 保存云会话状态以便复用
+agent-browser -p browserbase --session cloud-job state save cloud-session.json
+
+# 下次直接加载云会话状态
+agent-browser -p browserbase state load cloud-session.json
+agent-browser -p browserbase open https://example.com/dashboard
+```
+
+### 支持的云端提供商
+
+| 提供商 | 环境变量 | 说明 |
+|--------|----------|------|
+| `browserbase` | `BROWSERBASE_API_KEY` | Browserbase 云端浏览器 |
+
 ## 环境变量
 
 ```bash
@@ -250,6 +291,7 @@ AGENT_BROWSER_EXECUTABLE_PATH="/path/chrome" # 自定义浏览器路径
 AGENT_BROWSER_PROVIDER="browserbase"         # 云端浏览器提供商
 AGENT_BROWSER_AUTO_CONNECT="true"            # 自动连接本机 Chrome
 AGENT_BROWSER_STREAM_PORT="9223"             # WebSocket 流端口
+BROWSERBASE_API_KEY="<key>"                  # Browserbase API 密钥
 ```
 
 ## iOS 模拟器（需 Xcode + Appium）
