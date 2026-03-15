@@ -211,6 +211,79 @@ agent-browser state save auth.json    # 保存 Cookie、存储、认证状态
 agent-browser state load auth.json    # 恢复已保存状态
 ```
 
+## 本地与远端状态一致性
+
+加载本地保存的会话状态后，需验证远端（服务器）是否仍然接受该状态，以确保最终一致。
+
+### 基本一致性检查工作流
+
+```bash
+# 1. 加载本地状态
+agent-browser state load auth.json
+agent-browser open https://app.example.com/dashboard
+
+# 2. 验证实际落地 URL 是否与预期一致
+agent-browser get url                          # 读取当前 URL
+agent-browser wait --url "**/dashboard"        # 确认进入预期页面（会话有效）
+
+# 3. 用关键元素进一步确认页面状态
+agent-browser snapshot -i
+agent-browser is visible @e1                   # 确认已登录才可见的元素存在
+agent-browser get text @e2                     # 读取关键信息并与本地记录比对
+```
+
+### 检测会话失效并重新同步
+
+```bash
+# 加载本地状态后检查是否被重定向到登录页
+agent-browser state load auth.json
+agent-browser open https://app.example.com/dashboard
+agent-browser get url                          # 检查实际落地 URL
+
+# 若 URL 包含 /login，说明远端会话已失效，需重新认证
+agent-browser snapshot -i
+agent-browser fill @e1 "$USERNAME"
+agent-browser fill @e2 "$PASSWORD"
+agent-browser click @e3
+agent-browser wait --url "**/dashboard"        # 等待登录成功
+agent-browser state save auth.json             # 用最新状态覆盖本地存储
+```
+
+### 操作后验证远端状态
+
+提交表单或执行写操作后，主动检查远端结果以确认操作生效。
+
+```bash
+# 提交表单
+agent-browser click @submit
+agent-browser wait --load networkidle
+
+# 验证远端接受了操作（检查成功提示或 URL 变化）
+agent-browser wait --text "提交成功"           # 等待成功提示文本
+agent-browser get url                          # 确认 URL 已跳转到结果页
+agent-browser get text @e_result               # 读取结果信息与预期比对
+
+# 或通过状态断言验证
+agent-browser is visible @success_banner       # 成功 banner 可见
+agent-browser is enabled @next_step            # 下一步按钮已激活
+```
+
+### 跨会话状态核对
+
+```bash
+# 会话 A 写入数据后保存状态
+agent-browser --session writer open https://app.example.com/edit
+agent-browser --session writer click @save
+agent-browser --session writer wait --text "已保存"
+agent-browser --session writer state save writer-state.json
+
+# 会话 B 加载后验证数据已同步到远端
+agent-browser --session reader state load writer-state.json
+agent-browser --session reader open https://app.example.com/list
+agent-browser --session reader wait --load networkidle
+agent-browser --session reader get text @data_item   # 确认数据一致
+```
+
 ## 全局选项
 
 ```bash
