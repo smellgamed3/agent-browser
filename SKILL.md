@@ -1,6 +1,6 @@
 ---
 name: agent-browser
-description: 浏览器自动化工具。当用户需要：(1) 打开网页/导航 URL (2) 点击按钮、填写表单、提交数据 (3) 截图或保存 PDF (4) 抓取/提取网页内容 (5) 网页自动化测试 (6) 登录网站并保存会话 (7) 任何需要与网页交互的任务。底层使用 agent-browser CLI。
+description: 浏览器自动化工具。当用户需要：(1) 打开网页/导航 URL (2) 点击按钮、填写表单、提交数据 (3) 截图或保存 PDF (4) 抓取/提取网页内容 (5) 网页自动化测试 (6) 登录网站并保存会话 (7) 委派给云智能体（Browserbase 等云端浏览器提供商）(8) 任何需要与网页交互的任务。底层使用 agent-browser CLI。
 compatibility: 需要安装 agent-browser CLI（npm install -g agent-browser）
 allowed-tools: Bash(agent-browser:*)
 ---
@@ -82,6 +82,24 @@ agent-browser --auto-connect open https://example.com
 
 # 指定 CDP 端口
 agent-browser --cdp 9222 snapshot
+```
+
+### 委派给云智能体
+
+```bash
+# 设置云端浏览器提供商（如 Browserbase）
+export AGENT_BROWSER_PROVIDER="browserbase"
+export BROWSERBASE_API_KEY="your-api-key"
+
+# 通过云智能体运行浏览器任务
+agent-browser -p browserbase open https://example.com
+agent-browser -p browserbase snapshot -i
+agent-browser -p browserbase click @e1
+agent-browser -p browserbase screenshot result.png
+
+# 使用云会话保持状态
+agent-browser -p browserbase --session cloud-task open https://app.example.com
+agent-browser -p browserbase --session cloud-task state save session.json
 ```
 
 ## 命令速查
