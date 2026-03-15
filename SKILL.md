@@ -1,6 +1,6 @@
 ---
 name: agent-browser
-description: 浏览器自动化工具。当用户需要：(1) 打开网页/导航 URL (2) 点击按钮、填写表单、提交数据 (3) 截图或保存 PDF (4) 抓取/提取网页内容 (5) 网页自动化测试 (6) 登录网站并保存会话 (7) 任何需要与网页交互的任务。底层使用 agent-browser CLI。
+description: 浏览器自动化工具。当用户需要：(1) 打开网页/导航 URL (2) 点击按钮、填写表单、提交数据 (3) 截图或保存 PDF (4) 抓取/提取网页内容 (5) 网页自动化测试 (6) 登录网站并保存会话 (7) 检查本地与远端状态一致性 (8) 任何需要与网页交互的任务。底层使用 agent-browser CLI。
 compatibility: 需要安装 agent-browser CLI（npm install -g agent-browser）
 allowed-tools: Bash(agent-browser:*)
 ---
@@ -82,6 +82,31 @@ agent-browser --auto-connect open https://example.com
 
 # 指定 CDP 端口
 agent-browser --cdp 9222 snapshot
+```
+
+### 本地与远端状态一致性检查
+
+```bash
+# 加载本地保存的会话状态
+agent-browser state load auth.json
+agent-browser open https://app.example.com/dashboard
+
+# 验证远端是否接受本地状态（检查实际落地 URL）
+agent-browser get url                          # 读取当前 URL
+agent-browser wait --url "**/dashboard"        # 确认成功进入预期页面
+
+# 用关键元素确认页面状态与预期一致
+agent-browser snapshot -i
+agent-browser is visible @e1                   # 确认关键元素存在
+agent-browser get text @e2                     # 读取状态信息与本地记录比对
+
+# 检测到状态漂移时（如被重定向至登录页）重新同步
+agent-browser get url                          # 判断实际落地页
+agent-browser fill @e1 "$USERNAME"
+agent-browser fill @e2 "$PASSWORD"
+agent-browser click @e3
+agent-browser wait --url "**/dashboard"
+agent-browser state save auth.json             # 用最新状态覆盖本地存储
 ```
 
 ## 命令速查
