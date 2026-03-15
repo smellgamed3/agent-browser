@@ -242,6 +242,107 @@ agent-browser trace start                 # 开始录制 trace
 agent-browser trace stop trace.zip        # 停止并保存 trace
 ```
 
+## 删除 GitHub SSH/Deploy Key
+
+> 适用场景：GitHub 仓库 Settings → Deploy keys 页面中的"Delete"按钮无法点击或删除失效。
+
+### 基本删除流程（浏览器操作）
+
+```bash
+# 1. 加载已登录状态并打开 Deploy Keys 页面
+agent-browser state load auth.json
+agent-browser open https://github.com/OWNER/REPO/settings/keys
+agent-browser wait --load networkidle
+agent-browser snapshot -i
+
+# 2. 获取页面所有 key 的指纹和删除链接（用于定位目标）
+# 注意：以下选择器基于当前 GitHub DOM 结构，如 GitHub 更新 UI 需重新检查并调整
+agent-browser eval --stdin <<'EVALEOF'
+JSON.stringify(
+  Array.from(document.querySelectorAll('.key-list-item, [data-target="deploy-key"]'))
+    .map((el, i) => ({
+      index: i,
+      fingerprint: el.querySelector('.fingerprint, code, [data-fingerprint]')?.textContent?.trim(),
+      deleteHref: el.querySelector('a[data-confirm], button[data-confirm], a[href*="delete"]')?.getAttribute('href')
+    }))
+)
+EVALEOF
+
+# 3. 点击目标 key 对应的 Delete 按钮，再确认
+agent-browser find text "Delete" click
+agent-browser wait --load networkidle
+agent-browser snapshot -i
+# 若弹出 JS confirm 对话框：
+agent-browser dialog accept
+# 若为页面内确认按钮（modal）：
+agent-browser find role button click --name "Delete"
+agent-browser wait --load networkidle
+```
+
+### 直接导航到删除 URL（跳过 UI 按钮）
+
+```bash
+# 先获取 key ID 列表
+agent-browser eval --stdin <<'EVALEOF'
+JSON.stringify(
+  Array.from(document.querySelectorAll('form[action*="/keys/"]'))
+    .map(f => ({ action: f.action, method: f.querySelector('[name="_method"]')?.value }))
+)
+EVALEOF
+
+# 用目标 key 的删除 URL 直接提交（POST + _method=DELETE）
+agent-browser eval --stdin <<'EVALEOF'
+const form = document.querySelector('form[action="/OWNER/REPO/settings/keys/KEY_ID"]');
+if (form) form.submit();
+EVALEOF
+agent-browser wait --load networkidle
+agent-browser snapshot -i
+```
+
+### 通过 GitHub CLI 强制删除（UI 彻底失效时的回退方案）
+
+```bash
+# 列出所有 deploy key 及其 ID
+gh api /repos/OWNER/REPO/keys \
+  --jq '.[] | "\(.id)\t\(.title)\t\(.created_at)"'
+
+# 若需按指纹匹配，计算每个 key 的 SHA256 指纹（ssh-keygen 方式）
+gh api /repos/OWNER/REPO/keys | jq -r '.[] | "\(.id) \(.title) \(.key)"' | \
+  while IFS=' ' read -r id title key; do
+    fp=$(echo "$key" | ssh-keygen -lf /dev/stdin 2>/dev/null | awk '{print $2}')
+    echo "id=$id  title=$title  fingerprint=$fp"
+  done
+
+# 按 ID 删除指定 key（ID 由上一步获取）
+gh api -X DELETE /repos/OWNER/REPO/keys/{KEY_ID}
+
+# 批量删除所有 deploy key（谨慎使用）
+gh api /repos/OWNER/REPO/keys --jq '.[].id' | \
+  xargs -I{} gh api -X DELETE /repos/OWNER/REPO/keys/{}
+
+# 验证删除结果
+gh api /repos/OWNER/REPO/keys | jq 'length'
+```
+
+### 通过 GitHub API（curl）删除用户 SSH Key
+
+```bash
+# 列出用户 SSH key
+gh api /user/keys --jq '.[] | "\(.id)\t\(.title)\t\(.created_at)"'
+
+# 删除指定用户 SSH key
+gh api -X DELETE /user/keys/{KEY_ID}
+```
+
+### 常见错误排查
+
+| 错误 | 原因 | 解决方案 |
+|------|------|----------|
+| `404 Not Found` | key 已被删除 | 无需处理，确认已消失即可 |
+| `403 Forbidden` | Token 权限不足 | 确保 PAT 包含 `repo` scope（deploy key 操作需要此权限） |
+| UI 按钮无反应 | 页面 JS 未加载 | `agent-browser wait --load networkidle` 后重试，或用 CLI 回退方案 |
+| 删除后 key 重现 | CI/CD 自动重建 | 检查 Actions/外部系统是否在重新注册 key |
+
 ## 环境变量
 
 ```bash
